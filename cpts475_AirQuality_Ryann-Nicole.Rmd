@@ -1,0 +1,151 @@
+---
+title: "AirQuality"
+output: pdf_document
+date: "2024-12-9"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+if (!require(tidyverse)) install.packages("tidyverse")
+library(tidyverse)
+```
+
+```{r all air quality stats}
+air_quality <- read.csv("/Users/nikkifuller/Library/CloudStorage/OneDrive-WashingtonStateUniversity(email.wsu.edu)/Data Science Project Idea 32/airquality.csv", sep = ",", header = TRUE)
+
+demographics <- read.csv("/Users/nikkifuller/Library/CloudStorage/OneDrive-WashingtonStateUniversity(email.wsu.edu)/Data Science Project Idea 32/demographics.csv", sep = ",", header = TRUE)
+
+geography <- read.csv("/Users/nikkifuller/Library/CloudStorage/OneDrive-WashingtonStateUniversity(email.wsu.edu)/Data Science Project Idea 32/geography.csv", sep = ",", header = TRUE)
+```
+
+```{r preparing dataset}
+air_quality_longer <- air_quality %>%
+  pivot_longer(
+    cols = starts_with("ID_"),
+    names_to = "ID",
+    names_prefix = "ID_",
+    values_to = "Particle_Matter"
+  ) |> 
+  mutate(
+    ID = as.numeric(ID)
+  )
+
+full_aq_stats <- left_join(air_quality_longer, demographics, by = "ID")
+full_aq_stats <- left_join(full_aq_stats, geography, by = "ID")
+
+full_aq_stats <- full_aq_stats %>%
+  mutate(PM_greater_than_5 = Particle_Matter > 5) %>%
+  mutate(PM_greater_than_12 = Particle_Matter > 12) %>%
+  mutate(PM_greater_than_35 = Particle_Matter > 35)
+  
+str(full_aq_stats)
+```
+
+
+```{r Air Quality Particle Matter Thresholds}
+### histogram
+pm_filtered_threshold <- full_aq_stats %>%
+  filter(Particle_Matter < 100) %>%
+  filter(PM_greater_than_5 | PM_greater_than_12 | PM_greater_than_35) %>%
+  mutate(Threshold = case_when(PM_greater_than_35 ~ "> 35", PM_greater_than_12 ~ "> 12", PM_greater_than_5 ~ "> 5"))
+
+ggplot(pm_filtered_threshold, aes(x = Particle_Matter, fill = Threshold)) + 
+  geom_histogram(binwidth = 2, position = "dodge", alpha = 0.7) + 
+  scale_fill_manual(values = c("> 5" = "blue", "> 12" = "orange", "> 35" = "red")) + 
+  labs(title = "Distribution of Particle Matter (PM) Exceeding Thresholds", x = "Particle Matter (PM)", y = "Count", fill = "Threshold") + 
+  theme_minimal()
+
+aq_5_lm <- lm(Particle_Matter ~ PM_greater_than_5, data = full_aq_stats)
+summary(aq_5_lm)
+
+aq_12_lm <- lm(Particle_Matter ~ PM_greater_than_12, data = full_aq_stats)
+summary(aq_12_lm)
+
+aq_35_lm <- lm(Particle_Matter ~ PM_greater_than_35, data = full_aq_stats)
+summary(aq_35_lm)
+
+### outliers
+pm_filtered_outliers <- full_aq_stats %>%
+  filter(Particle_Matter >= 100)
+
+ggplot(pm_filtered_outliers, aes(x = Particle_Matter)) + 
+  geom_histogram(binwidth = 2, position = "dodge", alpha = 0.7, fill = "red") + 
+  labs(title = "Distribution of Particle Matter Exceeding Thresholds Outliers", 
+       x = "Particle Matter (PM)", 
+       y = "Count") + 
+  theme_minimal()
+
+
+```
+
+
+```{r Air Quality vs. Distance to Freeway}
+ggplot(full_aq_stats, aes(x = Distance_to_freeway, y = Particle_Matter, color = as.factor(Distance_to_freeway))) + 
+  geom_point(alpha = 0.5) + 
+  labs(title = "Air Quality vs. Distance to Freeway", x = "Distance to Freeway (meters)", y = "Particle Matter (PM)") + 
+  theme_minimal()
+
+aq_freeway_lm <- lm(Particle_Matter ~ Distance_to_freeway, data = full_aq_stats)
+summary(aq_freeway_lm)
+```
+
+
+```{r Air Quality vs. Tree Canopy}
+ggplot(full_aq_stats, aes(x = PercentTree, y = Particle_Matter, color = as.factor(PercentTree))) + 
+  geom_point(alpha = 0.5) + 
+  labs(title = "Air Quality vs. Tree Canopy %", x = "Tree Canopy (%)", y = "Particle Matter (PM)") + 
+  theme_minimal()
+
+aq_tree_lm <- lm(Particle_Matter ~ PercentTree, data = full_aq_stats)
+summary(aq_tree_lm)
+```
+
+
+
+```{r Air Quality vs. Low Income Percentage}
+ggplot(full_aq_stats, aes(x = LowIncome, y = Particle_Matter, color = as.factor(LowIncome))) +
+  geom_point() +
+  labs(title = "Air Quality vs. Low Income Percentage", x = "Low Income Percentage", y = "Particle Matter (PM)") +
+  theme_minimal()
+
+aq_income_lm <- lm(Particle_Matter ~ LowIncome, data = full_aq_stats)
+summary(aq_income_lm)
+```
+
+
+```{r Air Quality vs. Racial Demographics}
+ggplot() +
+  # white
+  geom_point(data = full_aq_stats, aes(x = White, y = Particle_Matter, color = "White"), alpha = 0.5) +
+  
+  # black
+  geom_point(data = full_aq_stats, aes(x = Black, y = Particle_Matter, color = "Black"), alpha = 0.5) +
+  
+  # multiracial
+  geom_point(data = full_aq_stats, aes(x = Multiracial, y = Particle_Matter, color = "Multiracial"), alpha = 0.5) +
+  
+    # hispanic
+  geom_point(data = full_aq_stats, aes(x = Hispanic, y = Particle_Matter, color = "Hispanic"), alpha = 0.5) +
+  
+  # Labels and formatting
+  labs(title = "Air Quality vs. Racial Demographics", 
+       x = "Percentage of Population", 
+       y = "Particle Matter (PM)", 
+       color = "Race") + 
+  scale_color_manual(values = c("White" = "blue", "Black" = "orange", "Multiracial" = "red", "Hispanic" = "green")) + 
+  theme_minimal()
+
+aq_white_lm <- lm(Particle_Matter ~ White, data = full_aq_stats)
+summary(aq_white_lm)
+
+aq_black_lm <- lm(Particle_Matter ~ Black, data = full_aq_stats)
+summary(aq_black_lm)
+
+aq_multiracial_lm <- lm(Particle_Matter ~ Multiracial, data = full_aq_stats)
+summary(aq_multiracial_lm)
+
+aq_hispanic_lm <- lm(Particle_Matter ~ Hispanic, data = full_aq_stats)
+summary(aq_hispanic_lm)
+```
+
